@@ -20,13 +20,20 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+
 public class MainActivity extends AppCompatActivity {
 
     private Button cameraBtn;
     private ImageView fullIV;
     private String currentPhotoPath;
     static final int REQUEST_TAKE_PHOTO = 1;
-    Uri photoURI;
 
 
     @Override
@@ -55,9 +62,10 @@ public class MainActivity extends AppCompatActivity {
                 }
                 // Continue only if the File was successfully created
                 if (photoFile != null) {
-                    photoURI = FileProvider.getUriForFile(MainActivity.this,
+                    Uri photoURI = FileProvider.getUriForFile(MainActivity.this,
                             "com.ivan.horniichuk.getimage",
                             photoFile);
+                    Log.d("currentPhotoURI",photoURI.toString());
                     takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
                     startActivityForResult(takePictureIntent, REQUEST_TAKE_PHOTO);
                 }
@@ -70,10 +78,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if(resultCode != RESULT_CANCELED) {
             if (requestCode == REQUEST_TAKE_PHOTO && resultCode == RESULT_OK) {
-                Toast.makeText(this,"SDDD",Toast.LENGTH_LONG).show();
-               // File image= new File(currentPhotoPath);
-                //fullIV.setImageURI(Uri.fromFile(image));
-                fullIV.setImageURI(photoURI);
+                File image= new File(currentPhotoPath);
+                fullIV.setImageURI(Uri.fromFile(image));
+                uploadToServer(currentPhotoPath);
             }
         }
     }
@@ -84,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
         String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
         String imageFileName = "JPEG_" + timeStamp + "_";
         File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        Log.d("currentPhotoEnvironment",Environment.DIRECTORY_PICTURES);
         File image = File.createTempFile(
                 imageFileName,  /* prefix */
                 ".jpg",         /* suffix */
@@ -92,6 +100,32 @@ public class MainActivity extends AppCompatActivity {
 
         // Save a file: path for use with ACTION_VIEW intents
         currentPhotoPath = image.getAbsolutePath();
+        Log.d("currentPhotoPath",currentPhotoPath);
         return image;
+    }
+
+    private void uploadToServer(String filePath) {
+        Retrofit retrofit = NetworkClient.getRetrofitClient(this);
+        UploadAPIs uploadAPIs = retrofit.create(UploadAPIs.class);
+        //Create a file object using file path
+        File file = new File(filePath);
+        // Create a request body with file and image media type
+        RequestBody fileReqBody = RequestBody.create(MediaType.parse("image/*"), file);
+        // Create MultipartBody.Part using file request-body,file name and part name
+        MultipartBody.Part part = MultipartBody.Part.createFormData("upload", file.getName(), fileReqBody);
+        //Create request body with text description and text media type
+        RequestBody description = RequestBody.create(MediaType.parse("text/plain"), "image-type");
+        //
+        Call call = uploadAPIs.uploadImage(part, description);
+        call.enqueue(new Callback() {
+            @Override
+            public void onResponse(Call call, Response response) {
+                Log.d("CurrentPhotoUploadRespo",response.toString());
+            }
+            @Override
+            public void onFailure(Call call, Throwable t) {
+                Log.d("CurrentPhotoUploadError",t.getMessage());
+            }
+        });
     }
 }
